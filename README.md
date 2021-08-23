@@ -44,3 +44,10 @@ Instead unpack the .tgz built above, or copy files from addons-source into
 cd /home/pzingg/.gramps/gramps51/plugins
 tar xvzf /home/pzingg/Projects/gramps-dev/addons/gramps51/download/DescendTreeExtra.addon.tgz
 ```
+
+# Substitution cheat sheet
+
+https://gramps-project.org/wiki/index.php/Gramps_5.1_Wiki_Manual_-_Reports_-_part_2
+
+Places need to be fixed using a gramplet that requires a geonames account:
+https://www.gramps-project.org/wiki/index.php/Addon:PlaceCleanupGramplet#Installing_the_Place_Cleanup_Gramplet

@@ -473,6 +473,7 @@ class MakeAncestorTree(AscendPerson):
         self.database = dbase
         self.canvas = canvas
         self.left_to_right = False
+        self.bold_direct = _gui.get_val('bolddirect')
         self.inlc_marr = _gui.get_val('inc_marr')
         self.inc_sib = self.left_to_right and _gui.get_val('show_parents')
         self.compress_tree = _gui.get_val('compress_tree')
@@ -492,7 +493,8 @@ class MakeAncestorTree(AscendPerson):
 
         #print str(index) + " add_person " + str(indi_handle)
         myself = PersonBox((index[0] - 1,) + index[1:], False)
-        myself.set_bold()
+        if self.bold_direct:
+            myself.set_bold()
 
         if index[LVL_GEN] == 1:  # Center Person
             self.center_family = fams_handle
