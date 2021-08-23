@@ -60,7 +60,7 @@ _BORN = _("b.", "birth abbreviation"),
 _DIED = _("d.", "death abbreviation"),
 _MARR = _("m.", "marriage abbreviation"),
 
-_RPT_NAME = 'descend_chart'
+_RPT_NAME = 'descend_chart_extra'
 
 #------------------------------------------------------------------------
 #

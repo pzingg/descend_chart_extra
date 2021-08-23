@@ -30,3 +30,17 @@ python3 setup.py build
 cd /home/pzingg/Projects/gramps-dev/gramps/build/scripts-3.8
 ./gramps
 ```
+
+## Installing addons
+
+This doesn't work:
+Go to Edit -> Preferences -> General
+Change the URL in "Where to check:" to file:///home/pzingg/Projects/gramps-dev/addons/gramps51/
+
+Instead unpack the .tgz built above, or copy files from addons-source into
+/home/pzingg/.gramps/gramps51/plugins/DescendTreeExtra. For example:
+
+```
+cd /home/pzingg/.gramps/gramps51/plugins
+tar xvzf /home/pzingg/Projects/gramps-dev/addons/gramps51/download/DescendTreeExtra.addon.tgz
+```
