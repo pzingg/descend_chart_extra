@@ -45,6 +45,7 @@ from gramps.gen.plug.report import utils
 from gramps.gen.plug.docgen import (FontStyle, ParagraphStyle, GraphicsStyle,
                                     FONT_SANS_SERIF, PARA_ALIGN_CENTER)
 from gramps.plugins.lib.libtreebase import *
+from gramps.plugins.lib.librecurse import AscendPerson
 from gramps.gen.proxy import CacheProxyDb
 from gramps.gen.display.name import displayer as _nd
 from gramps.gen.utils.db import family_name
@@ -62,6 +63,10 @@ _MARR = _("m.", "marriage abbreviation"),
 
 _RPT_NAME = 'descend_chart_extra'
 
+LVL_GEN, LVL_INDX, LVL_Y = range(3)
+LVL_ISDESC = 1
+
+
 #------------------------------------------------------------------------
 #
 # Box classes
@@ -73,11 +78,12 @@ class DescendantBoxBase(BoxBase):
     Set the boxstr and some new attributes that are needed
     """
 
-    def __init__(self, boxstr):
+    def __init__(self, boxstr, descendant_tree):
         BoxBase.__init__(self)
         self.boxstr = boxstr
         self.linked_box = None
         self.father = None
+        self.in_descendant_tree = descendant_tree
 
     def calc_text(self, database, person, family):
         """  A single place to calculate box text """
@@ -87,27 +93,39 @@ class DescendantBoxBase(BoxBase):
         self.text = calc.calc_lines(person, family,
                                     gui.working_lines(self))
 
+def boxes_in_ancestor_tree(canvas):
+    return [b for b in canvas.boxes if not b.in_descendant_tree]
+
+def boxes_in_descendant_tree(canvas):
+    return [b for b in canvas.boxes if b.in_descendant_tree]
+
 class PersonBox(DescendantBoxBase):
     """
     Calculates information about the box that will print on a page
     """
 
-    def __init__(self, level, boldable=0):
-        DescendantBoxBase.__init__(self, "CG2-box")
+    def __init__(self, level, descendant_tree):
+        DescendantBoxBase.__init__(self, "CG2-box", descendant_tree)
         self.level = level
 
     def set_bold(self):
         """  update me to a bolded box """
         self.boxstr = "CG2b-box"
 
+    def __lt__(self, other):
+        return self.level[LVL_Y] < other.level[LVL_Y]
+
 class FamilyBox(DescendantBoxBase):
     """
     Calculates information about the box that will print on a page
     """
 
-    def __init__(self, level):
-        DescendantBoxBase.__init__(self, "CG2-fam-box")
+    def __init__(self, level, descendant_tree):
+        DescendantBoxBase.__init__(self, "CG2-fam-box", descendant_tree)
         self.level = level
+
+    def __lt__(self, other):
+        return self.level[LVL_Y] < other.level[LVL_Y]
 
 class PlaceHolderBox(BoxBase):
     """
@@ -364,6 +382,419 @@ class TitleC(DescendantTitleBase):
 
         self.set_box_height_width()
 
+# -----------------------------------------------------------------------
+# 
+# PART 1. PEDIGREE
+#
+# -----------------------------------------------------------------------
+
+#------------------------------------------------------------------------
+#
+# CalcItems           (helper class to calculate text)
+# make_ancestor_tree  (main recursive functions)
+#
+#------------------------------------------------------------------------
+class CalcItems:
+    """ A helper class to calculate the default box text
+    and text for each person / marriage
+    """
+    def __init__(self, dbase):
+        _gui = GuiConnect()
+        self._gui = _gui
+
+        #calculate the printed lines for each box
+        #str = ""
+        #if self.get_val('miss_val'):
+        #    str = "_____"
+        display_repl = _gui.get_val("replace_list")
+        self.center_use = _gui.get_val("descend_disp") # _gui.get_val("center_uses")
+        self.disp_father = self.center_use # _gui.get_val("father_disp")
+        self.disp_mother = self.center_use # _gui.get_val("mother_disp")
+        self.disp_marr = [_gui.get_val("marr_disp")]
+
+        self.__calc_l = CalcLines(dbase, display_repl, _gui._locale, _gui._nd)
+
+        self.__blank_father = None
+        self.__blank_mother = None
+
+        self.__blank_father = \
+            self.__calc_l.calc_lines(None, None, self.disp_father)
+        self.__blank_mother = \
+            self.__calc_l.calc_lines(None, None, self.disp_mother)
+
+        self.__blank_marriage = \
+            self.__calc_l.calc_lines(None, None, self.disp_marr)
+
+    def calc_person(self, index, indi_handle, fams_handle):
+        working_lines = ""
+        if index[1] % 2 == 0 or (index[1] == 1 and self.center_use == 0):
+            if indi_handle == fams_handle is None:
+                working_lines = self.__calc_l.calc_lines(
+                    None, None, self.disp_father)
+            else:
+                working_lines = self.disp_father
+        else:
+            if indi_handle == fams_handle is None:
+                working_lines = self.__calc_l.calc_lines(
+                    None, None, self.disp_mother)
+            else:
+                working_lines = self.disp_mother
+
+        if indi_handle == fams_handle is None:
+            return working_lines
+        else:
+            return self.__calc_l.calc_lines(indi_handle, fams_handle,
+                                            working_lines)
+
+    def calc_marriage(self, indi_handle, fams_handle):
+        if indi_handle == fams_handle is None:
+            return self.__blank_marriage
+        else:
+            return self.__calc_l.calc_lines(indi_handle, fams_handle,
+                                            self.disp_marr)
+
+#------------------------------------------------------------------------
+#
+# Class MakeAncestorTree
+#
+#------------------------------------------------------------------------
+class MakeAncestorTree(AscendPerson):
+    """
+    The main procedure to use recursion to make the tree based off of a person.
+    order of people inserted into Persons is important.
+    makes sure that order is done correctly.
+    """
+    def __init__(self, dbase, canvas):
+        _gui = GuiConnect()
+
+        max_pedigree = _gui.get_val('maxpedigree')
+        fill_out = _gui.get_val('fill_out')
+        AscendPerson.__init__(self, dbase, max_pedigree, fill_out)
+        self.database = dbase
+        self.canvas = canvas
+        self.left_to_right = False
+        self.inlc_marr = _gui.get_val('inc_marr')
+        self.inc_sib = self.left_to_right and _gui.get_val('show_parents')
+        self.compress_tree = _gui.get_val('compress_tree')
+        self.center_family = None
+        self.lines = [None] * (max_pedigree + 1)
+
+        self.max_generation = 0
+        self.center_boxes = [None] * 4
+
+        self.calc_items = CalcItems(self.database)
+
+    def get_center_boxes(self):
+        return self.center_boxes
+
+    def add_person(self, index, indi_handle, fams_handle):
+        """ Makes a person box and add that person into the Canvas. """
+
+        #print str(index) + " add_person " + str(indi_handle)
+        myself = PersonBox((index[0] - 1,) + index[1:], False)
+        myself.set_bold()
+
+        if index[LVL_GEN] == 1:  # Center Person
+            self.center_family = fams_handle
+
+        if index[LVL_GEN] > self.max_generation:
+            self.max_generation = index[LVL_GEN]
+
+        myself.text = self.calc_items.calc_person(index,
+                                                  indi_handle, fams_handle)
+        # myself.text[0] = myself.text[0] + ' ' + repr(index) # for debugging
+
+        if indi_handle is not None:  # None is legal for an empty box
+            myself.add_mark(self.database,
+                            self.database.get_person_from_handle(indi_handle))
+
+        self.canvas.add_box(myself)
+
+        #make the lines
+        indx = index[LVL_GEN]
+        self.lines[indx] = myself
+        if indx > 1:
+            if self.left_to_right:
+                if self.lines[indx - 1].line_to is None:
+                    line = LineBase(self.lines[indx - 1])
+                    self.lines[indx - 1].line_to = line
+                    self.canvas.add_line(line)
+                else:
+                    line = self.lines[indx - 1].line_to
+                line.add_to(myself)
+            else:
+                line = LineBase(myself)
+                line.add_to(self.lines[indx - 1])
+                self.canvas.add_line(line)
+
+        # Save for merging with descendant tree
+        if indx == 1 and self.center_boxes[3] is None:
+            # Center person
+            self.center_boxes[3] = myself
+        elif indx == 2:
+            # Mother or father of center person
+            if self.center_boxes[0] is None:
+                self.center_boxes[0] = myself
+            else:
+                self.center_boxes[2] = myself
+
+        return myself
+
+    def add_person_again(self, index, indi_handle, fams_handle):
+        self.add_person(index, indi_handle, fams_handle)
+
+    def add_marriage(self, index, indi_handle, fams_handle):
+        """ Makes a marriage box and add that person into the Canvas. """
+
+        if not self.inlc_marr:
+            return
+
+        indx = index[LVL_GEN]
+        myself = FamilyBox((indx - 1,) + index[1:], False)
+        if indx == 2 and self.center_boxes[1] is None:
+            # Family (parents) of center person
+            self.center_boxes[1] = myself
+
+        #calculate the text.
+        myself.text = self.calc_items.calc_marriage(indi_handle, fams_handle)
+
+        self.canvas.add_box(myself)
+
+    def y_index(self, x_level, index):
+        """ Calculate the column or generation that this person is in.
+        x_level  -> 0 to max_gen-1
+        index    -> 1 to (self.max_generation**2)-1
+        """
+        #Calculate which row in the column of people.
+        tmp_y = index - (2**x_level)
+        #Calculate which row in the table (yes table) of people.
+        delta = (2**self.max_generation) // (2**(x_level))
+        return int((delta / 2) + (tmp_y * delta)) - 1
+
+    def do_y_indx(self):
+        ''' Make the y_index for all boxes
+        first off of a forumula, then remove blank areas around the edges,
+        then compress the tree if desired
+        '''
+
+        boxes = boxes_in_ancestor_tree(self.canvas)
+        min_y = self.y_index(boxes[0].level[LVL_GEN],
+                             boxes[0].level[LVL_INDX])
+        for box in boxes:
+            if "fam" in box.boxstr:
+                box.level = box.level + \
+                    (self.y_index(box.level[LVL_GEN] - 1,
+                                  int(box.level[LVL_INDX] / 2)),)
+            else:
+                box.level = box.level + \
+                    (self.y_index(box.level[LVL_GEN], box.level[LVL_INDX]),)
+            min_y = min(min_y, box.level[LVL_Y])
+            #print (str(box.level))
+
+        boxes = boxes_in_ancestor_tree(self.canvas)
+
+        #if a last father (of fathers) does not have a father/parents
+        #Then there could be a gap.  Remove this gap
+        if min_y > 0:
+            for box in boxes:
+                box.level = box.level[:LVL_Y] + (box.level[LVL_Y] - min_y,)
+
+        #Now that we have y_index, lets see if we need to squish the tree
+        self.canvas.boxes.sort()  # Sort them on the y_index
+        if not self.compress_tree:
+            return
+        #boxes are already in top down [LVL_Y] form so lets
+        #set the box in the correct y level depending on compress_tree
+        y_level = 0
+        current_y = boxes[0].level[LVL_Y]
+        for box in boxes:
+            y_index = box.level[LVL_Y]
+            if y_index > current_y:
+                current_y = y_index
+                y_level += 1
+            box.level = box.level[:LVL_Y] + (y_level,)
+
+    def do_sibs(self):
+        if not self.inc_sib or self.center_family is None:
+            return
+
+        family = self.database.get_family_from_handle(self.center_family)
+        mykids = [kid.ref for kid in family.get_child_ref_list()]
+
+        if len(mykids) == 1:  # No other siblings.  Don't do anything.
+            return
+
+        # The first person is the center person had he/she has our information
+        center = self.canvas.boxes.pop(self.canvas.boxes.index(self.lines[1]))
+        line = center.line_to
+        level = center.level[LVL_Y]
+
+        move = level - (len(mykids) // 2) + ((len(mykids) + 1) % 2)
+
+        if move < 0:
+            # more kids than parents.  ran off the page.  Move them all down
+            for box in boxes_in_ancestor_tree(self.canvas):
+                box.level = (box.level[0], box.level[1], box.level[2] - move)
+            move = 0
+
+        line.start = []
+        rrr = -1  # if len(mykids)%2 == 1 else 0
+        for kid in mykids:
+            rrr += 1
+            mee = self.add_person((1, 1, move + rrr), kid, self.center_family)
+            line.add_from(mee)
+            #mee.level = (0, 1, level - (len(mykids)//2)+rrr)
+        mee.line_to = line
+
+    def start(self, person_id):
+        """ go ahead and make it happen """
+        center = self.database.get_person_from_gramps_id(person_id)
+        if center is None:
+            raise ReportError(
+                _("Person %s is not in the Database") % person_id)
+        center_h = center.get_handle()
+
+        #Step 1.  Get the people
+        self.recurse(center_h)
+
+        #Step 2.  Calculate the y_index for everyone
+        self.do_y_indx()
+
+        #Step 3.  Siblings of the center person
+        self.do_sibs()
+
+
+#------------------------------------------------------------------------
+#
+# Transform Classes
+#
+#------------------------------------------------------------------------
+#------------------------------------------------------------------------
+# Class lr_Transform
+#------------------------------------------------------------------------
+class LRTransform:
+    """
+    setup all of the boxes on the canvas in for a left/right report
+    """
+    def __init__(self, canvas, max_generations):
+        self.canvas = canvas
+        self.max_generations = max_generations
+        self.left_to_right = False
+        self.width = 0
+        self.rept_opts = canvas.report_opts
+        self.x_offset = self.rept_opts.col_width + self.rept_opts.max_box_width
+        self.y_offset = (self.rept_opts.littleoffset * 2 +
+                         self.canvas.title.height)
+
+    def _place(self, box):
+        """ put the box in it's correct spot """
+        #1. cm_x
+        if self.left_to_right:
+            dx = box.level[LVL_GEN]
+        else:
+            dx = self.max_generations - box.level[LVL_GEN]
+        box.x_cm = self.rept_opts.littleoffset
+        box.x_cm += dx * self.x_offset
+        if box.x_cm - self.x_offset > self.width:
+            self.width = box.x_cm - self.x_offset
+
+        #2. cm_y
+        box.y_cm = self.rept_opts.max_box_height + self.rept_opts.box_pgap
+        box.y_cm *= box.level[LVL_Y]
+        box.y_cm += self.y_offset
+        #if box.height < self.rept_opts.max_box_height:
+        #    box.y_cm += ((self.rept_opts.max_box_height - box.height) /2)
+
+    def place(self):
+        """ Step through boxes so they can be put in the right spot """
+        #prime the pump
+        boxes = boxes_in_ancestor_tree(self.canvas)
+        self.__last_y_level = boxes[0].level[LVL_Y]
+        #go
+        for box in boxes:
+            self._place(box)
+
+#------------------------------------------------------------------------
+#
+# class MakeAncReport
+#
+#------------------------------------------------------------------------
+class MakeAncReport:
+
+    def __init__(self, dbase, canvas, inlc_marr, compress_tree):
+
+        self.database = dbase
+        self.canvas = canvas
+        self.inlc_marr = inlc_marr
+        self.compress_tree = compress_tree
+
+        self.mother_ht = self.father_ht = 0
+
+        self.max_generations = 0
+        self.width = 0
+
+    def get_height_width(self, box):
+        """
+        obtain width information for each level (x)
+        obtain height information for each item
+        """
+
+        self.canvas.set_box_height_width(box)
+
+        if box.width > self.canvas.report_opts.max_box_width:
+            self.canvas.report_opts.max_box_width = box.width  # + box.shadow
+
+        if box.level[LVL_Y] > 0:
+            if box.level[LVL_INDX] % 2 == 0 and box.height > self.father_ht:
+                self.father_ht = box.height
+            elif box.level[LVL_INDX] % 2 == 1 and box.height > self.mother_ht:
+                self.mother_ht = box.height
+
+        if box.level[LVL_GEN] > self.max_generations:
+            self.max_generations = box.level[LVL_GEN]
+
+    def get_generations(self):
+        return self.max_generations
+
+    def get_width(self):
+        return self.width
+
+    def start(self):
+        # __gui = GUIConnect()
+        # 1.
+        #set the sizes for each box and get the max_generations.
+        self.father_ht = 0.0
+        self.mother_ht = 0.0
+        boxes = boxes_in_ancestor_tree(self.canvas)
+        for box in boxes:
+            self.get_height_width(box)
+
+        if self.compress_tree and not self.inlc_marr:
+            self.canvas.report_opts.max_box_height = \
+                min(self.father_ht, self.mother_ht)
+        else:
+            self.canvas.report_opts.max_box_height = \
+                max(self.father_ht, self.mother_ht)
+
+        #At this point we know everything we need to make the report.
+        #Size of each column of people - self.rept_opt.box_width
+        #size of each column (or row) of lines - self.rept_opt.col_width
+        #size of each row - self.rept_opt.box_height
+        #go ahead and set it now.
+        for box in boxes:
+            box.width = self.canvas.report_opts.max_box_width
+
+        # 2.
+        #setup the transform class to move around the boxes on the canvas
+        transform = LRTransform(self.canvas, self.max_generations)
+        transform.place()
+        self.width = transform.width
+
+# -----------------------------------------------------------------------
+# 
+# PART 2. DESCENDANTS
+#
+# -----------------------------------------------------------------------
 
 #------------------------------------------------------------------------
 #
@@ -411,7 +842,7 @@ class RecurseDown:
             we will calculate the real .x_cm later (with indentation)
         """
 
-        level = box.level[0]
+        level = box.level[LVL_GEN]
         #make the column list of people
         while len(self.cols) <= level:
             self.cols.append(None)
@@ -432,7 +863,7 @@ class RecurseDown:
             else:
                 box.y_cm += self.canvas.report_opts.box_mgap
 
-            if box.level[1] == 0 and self.__last_direct[level]:
+            if box.level[LVL_ISDESC] == 0 and self.__last_direct[level]:
                 #ok, a new direct descendant.
                 #print level, box.father is not None, \
                 # self.__last_direct[level].father is not None, box.text[0], \
@@ -442,11 +873,11 @@ class RecurseDown:
                     box.y_cm += self.canvas.report_opts.box_pgap
 
         self.cols[level] = box
-        if box.level[1] == 0:
+        if box.level[LVL_ISDESC] == 0:
             self.__last_direct[level] = box
 
         if self.spouse_indent:
-            box.x_cm = self.canvas.report_opts.spouse_offset * box.level[1]
+            box.x_cm = self.canvas.report_opts.spouse_offset * box.level[LVL_ISDESC]
         else:
             box.x_cm = 0.0
 
@@ -454,15 +885,15 @@ class RecurseDown:
 
     def add_person_box(self, level, indi_handle, fams_handle, father):
         """ Makes a person box and add that person into the Canvas. """
-        myself = PersonBox(level)
+        myself = PersonBox(level, True)
         myself.father = father
 
-        if myself.level[1] == 0 and self.bold_direct and self.bold_now:
+        if myself.level[LVL_ISDESC] == 0 and self.bold_direct and self.bold_now:
             if self.bold_now == 1:
                 self.bold_now = 0
             myself.set_bold()
 
-        if level[1] == 0 and father and myself.level[0] != father.level[0]:
+        if level[LVL_ISDESC] == 0 and father and myself.level[LVL_GEN] != father.level[LVL_GEN]:
             #I am a child
             if father.line_to:
                 line = father.line_to
@@ -471,7 +902,7 @@ class RecurseDown:
                 father.line_to = line
                 #self.canvas.add_line(line)
 
-            line.end.append(myself)
+            line.add_to(myself)
 
         #calculate the text.
         myself.calc_text(self.database, indi_handle, fams_handle)
@@ -488,7 +919,7 @@ class RecurseDown:
 
     def add_marriage_box(self, level, indi_handle, fams_handle, father):
         """ Makes a marriage box and add that person into the Canvas. """
-        myself = FamilyBox(level)
+        myself = FamilyBox(level, True)
 
         #if father is not None:
         #    myself.father = father
@@ -618,12 +1049,14 @@ class RecurseDown:
         self.bold_now = 0
 
         #Set up the lines for the family
-        if not family_line.line_to:
+        line = family_line.line_to
+        if not line:
             #no children.
-            family_line.line_to = LineBase(family_line)
+            line = LineBase(family_line)
+            family_line.line_to = line
         if self.inlc_marr:
-            family_line.line_to.start.append(father_b)
-        family_line.line_to.start.append(mother_b)
+            line.add_from(father_b)
+        line.add_from(mother_b)
 
         return retrn
 
@@ -688,9 +1121,12 @@ class MakePersonTree(RecurseDown):
         RecurseDown.__init__(self, dbase, canvas)
         self.max_generations -= 1
 
-    def start(self, person_id):
+    def start(self, person_id, center_boxes):
         """follow the steps to make a tree off of a person"""
         persons = []
+
+        center_father = None
+        center_mother = None
 
         center1 = self.database.get_person_from_gramps_id(person_id)
         if center1 is None:
@@ -726,7 +1162,10 @@ class MakePersonTree(RecurseDown):
         #######################
         #now it will ONLY be my fathers parents
         if family2:
-            self.add_family(0, family2, None)
+            family = self.add_family(0, family2, None)
+            # Save these so we can link up to them
+            center_father = family[0] if len(family) > 0 and isinstance(family[0], PersonBox) else None
+            center_mother = family[-1] if len(family) > 1 and isinstance(family[-1], PersonBox) else None
         else:
             self.bold_now = 2
             self.recurse(center1_h, 0, 0, None)
@@ -739,7 +1178,62 @@ class MakePersonTree(RecurseDown):
         if mother2_h:
             self.recurse_if(mother2_h, 0)
 
+        if center_boxes is not None:
+            self.link_ancestors_to_center(center_boxes, center_father, center_mother)
+
         return persons
+
+    def link_ancestors_to_center(self, center_boxes, center_father, center_mother):
+        print('\ncenter_boxes:')
+        print('father_b ' + debug_box(center_boxes[0]))
+        print('  marr_b ' + debug_box(center_boxes[1]))
+        print('mother_b ' + debug_box(center_boxes[2]))
+        print(' child_b ' + debug_box(center_boxes[3]))
+        ancestor_father = center_boxes[0]
+        ancestor_mother = center_boxes[2]
+        lines_to_remove = []
+        if ancestor_father is not None:
+            for line in self.canvas.lines:
+                try:
+                    line.start.index(ancestor_father)
+                    lines_to_remove.append(line)
+                    continue
+                except ValueError:
+                    pass
+
+                try:
+                    line.end.remove(ancestor_father)
+                    line.add_to(center_father)
+                except ValueError:
+                    pass
+
+        if ancestor_mother is not None:
+            for line in self.canvas.lines:
+                try:
+                    line.start.index(ancestor_mother)
+                    lines_to_remove.append(line)
+                    continue
+                except ValueError:
+                    pass
+
+                try:
+                    line.end.remove(ancestor_mother)
+                    line.add_to(center_mother)
+                except ValueError:
+                    pass
+
+        for line in lines_to_remove:
+            try:
+                _ = self.canvas.lines.remove(line)
+            except ValueError:
+                pass
+
+        for i, box in enumerate(center_boxes):
+            if box is not None:
+                try:
+                    _ = self.canvas.boxes.remove(box)
+                except ValueError:
+                    pass
 
 #------------------------------------------------------------------------
 #
@@ -865,7 +1359,7 @@ class MakeFamilyTree(RecurseDown):
         #if not put in a placeholder
         family1_line = family1_l[1] if self.inlc_marr else family1_l[0]
         if family1_line.line_to.end == []:
-            box = PlaceHolderBox((mother1_b.level[0]+1, 0))
+            box = PlaceHolderBox((mother1_b.level[LVL_GEN]+1, 0))
             box.father = family1_l[0]
             self.add_to_col(box)
             family1_line.line_to.end = [box]
@@ -955,6 +1449,30 @@ class MakeFamilyTree(RecurseDown):
             self.recurse_if(father2_h, 0)
 
 
+def debug_canvas(canvas, label):
+    """print out some information on a canvas's boxes and lines"""
+    print(f'\n{label}:')
+    print(f'{len(canvas.boxes)} boxes')
+    for i, box in enumerate(canvas.boxes):
+        print(f'[{i}] ' + debug_box(box))
+    print(f'{len(canvas.lines)} lines')
+    for i, line in enumerate(canvas.lines):
+        start = [box.level for box in line.start]
+        end = [box.level for box in line.end]
+        print(f'[{i}] start {start} end {end}')
+
+def debug_box(box):
+    if box is None:
+        return 'None'
+
+    tree = 'D' if box.in_descendant_tree else 'A'
+    line = box.line_to
+    if line is not None:
+        end = [box.level for box in line.end]
+        return f'{tree} {box.level} {box.boxstr} "{box.text}" TO {end} xy ({box.x_cm:.1f}, {box.y_cm:.1f})'
+    else:
+        return f'{tree} {box.level} {box.boxstr} "{box.text}" LEAF xy ({box.x_cm:.1f}, {box.y_cm:.1f})'
+
 #------------------------------------------------------------------------
 #
 # Class MakeReport
@@ -967,9 +1485,10 @@ class MakeReport:
     people will be placed on the canvas.
     """
 
-    def __init__(self, dbase, canvas, ind_spouse, compress_tree):
+    def __init__(self, dbase, canvas, ind_spouse, compress_tree, x_offset=0):
         self.database = dbase
         self.canvas = canvas
+        self.tree_x_offset = x_offset
 
         gui = GuiConnect()
         self.do_parents = gui.get_val('show_parents')
@@ -993,12 +1512,12 @@ class MakeReport:
         if box.height > self.canvas.report_opts.max_box_height:
             self.canvas.report_opts.max_box_height = box.height
 
-        while len(self.cols) <= box.level[0]:
+        while len(self.cols) <= box.level[LVL_GEN]:
             self.cols.append([])
 
-        self.cols[box.level[0]].append(box)
+        self.cols[box.level[LVL_GEN]].append(box)
 
-        #tmp = box.level[0]
+        #tmp = box.level[LVL_GEN]
         #if tmp > self.max_generations:
         #    self.max_generations = tmp
 
@@ -1031,21 +1550,21 @@ class MakeReport:
 
             #Form the parental (left) group.
             #am I a direct descendant?
-            if box.level[1] == 0:
+            if box.level[LVL_ISDESC] == 0:
                 #I am the father/mother.
                 left_group.append(box)
                 if box.line_to:
                     line = box.line_to
                 box = box.linked_box
 
-            if box and box.level[1] != 0 and self.inlc_marr:
+            if box and box.level[LVL_ISDESC] != 0 and self.inlc_marr:
                 #add/start with the marriage box
                 left_group.append(box)
                 if box.line_to:
                     line = box.line_to
                 box = box.linked_box
 
-            if box and box.level[1] != 0 and self.max_spouses > 0:
+            if box and box.level[LVL_ISDESC] != 0 and self.max_spouses > 0:
                 #add/start with the spousal box
                 left_group.append(box)
                 if box.line_to:
@@ -1053,7 +1572,7 @@ class MakeReport:
                 box = box.linked_box
 
             if line:
-                if len(line.start) > 1 and line.start[-1].level[1] == 0:
+                if len(line.start) > 1 and line.start[-1].level[LVL_ISDESC] == 0:
                     #a dad and mom family from RecurseDown.add_family. add mom
                     left_group.append(line.start[-1])
                     box = box.linked_box
@@ -1176,7 +1695,8 @@ class MakeReport:
     def start(self):
         """Make the report"""
         #for person in self.persons.depth_first_gen():
-        for box in self.canvas.boxes:
+        boxes = boxes_in_descendant_tree(self.canvas)
+        for box in boxes:
             self.calc_box(box)
         #At this point we know everything we need to make the report.
         #Width of each column of people - self.rept_opt.box_width
@@ -1187,15 +1707,15 @@ class MakeReport:
             #there were none!
             #remove column 0 and move everyone back one level
             self.cols.pop(0)
-            for box in self.canvas.boxes:
-                box.level = (box.level[0] - 1, box.level[1])
+            for box in boxes:
+                box.level = (box.level[LVL_GEN] - 1, box.level[LVL_ISDESC])
 
         #go ahead and set it now.
         width = self.canvas.report_opts.max_box_width
-        for box in self.canvas.boxes:
+        for box in boxes:
             box.width = width - box.x_cm
             box.x_cm += self.canvas.report_opts.littleoffset
-            box.x_cm += (box.level[0] *
+            box.x_cm += (box.level[LVL_GEN] *
                          (self.canvas.report_opts.col_width +
                           self.canvas.report_opts.max_box_width))
 
@@ -1203,6 +1723,11 @@ class MakeReport:
             box.y_cm += self.canvas.title.height
 
         self.Make_report()
+        
+        if self.tree_x_offset > 0:
+            for box in boxes:
+                box.x_cm += self.tree_x_offset
+
 
 
 class GuiConnect:
@@ -1275,7 +1800,7 @@ class GuiConnect:
 
         if box.boxstr == "CG2-fam-box":  #(((((
             workinglines = display_marr
-        elif box.level[1] > 0 or (box.level[0] == 0 and box.father):
+        elif box.level[LVL_ISDESC] > 0 or (box.level[LVL_GEN] == 0 and box.father):
             workinglines = display_spou
         else:
             workinglines = display
@@ -1325,36 +1850,49 @@ class DescendTreeExtra(Report):
         self.Connect.set__opts(self.options.menu, self.options.name,
                                self._locale, self._nd)
 
-        style_sheet = self.doc.get_style_sheet()
-        font_normal = style_sheet.get_paragraph_style("CG2-Normal").get_font()
-
-        #The canvas that we will put our report on and print off of
-        self.canvas = Canvas(self.doc,
-                             ReportOptions(self.doc, font_normal, "CG2-line"))
-
-        self.canvas.report_opts.box_shadow *= \
-                        self.Connect.get_val('shadowscale')
-        self.canvas.report_opts.box_pgap *= self.Connect.get_val('box_Yscale')
-        self.canvas.report_opts.box_mgap *= self.Connect.get_val('box_Yscale')
 
         center_id = self.Connect.get_val('pid')
+        ind_spouse = self.Connect.get_val('ind_spouse')
+        inlc_marr = self.Connect.get_val('inc_marr')
+        compress_tree = self.Connect.get_val('compress_tree')
 
-        #make the tree
-        tree = self.Connect.Make_Tree(database, self.canvas)
-        tree.start(center_id)
-        tree = None
+        self.canvas = self.new_canvas()
 
         #Title
         title = self.Connect.Title_class(database, self.doc)
         title.calc_title(center_id)
         self.canvas.add_title(title)
 
+        build_ancestors = True
+        build_descendants = True
+
+        if build_ancestors:
+            #make the ancestor tree
+            tree = MakeAncestorTree(database, self.canvas)
+            tree.start(center_id)
+            center_boxes = tree.get_center_boxes()
+
+            report = MakeAncReport(database, self.canvas, inlc_marr, compress_tree)
+            report.start()
+            pedigree_generations = report.get_generations()
+            x_offset = report.get_width()
+        else:
+            center_boxes = None
+            pedigree_generations = 0
+            x_offset = 0
+
+        if build_descendants:
+            #make the descendant tree
+            tree = self.Connect.Make_Tree(database, self.canvas)
+            tree.start(center_id, center_boxes)
+        tree = None
+
         #make the report as big as it wants to be.
-        ind_spouse = self.Connect.get_val("ind_spouse")
-        compress_tree = self.Connect.get_val('compress_tree')
-        report = MakeReport(database, self.canvas, ind_spouse, compress_tree)
+        report = MakeReport(database, self.canvas, ind_spouse, compress_tree, x_offset=x_offset)
         report.start()
         report = None
+
+        debug_canvas(self.canvas, f'tree for {center_id}')
 
         #note?
         if self.Connect.get_val("inc_note"):
@@ -1376,6 +1914,20 @@ class DescendTreeExtra(Report):
 
         if scale != 1 or self.Connect.get_val('shadowscale') != 1.0:
             self.scale_styles(scale)
+
+    def new_canvas(self):
+        """create the canvas that we will put our report on and print off of"""
+        style_sheet = self.doc.get_style_sheet()
+        font_normal = style_sheet.get_paragraph_style("CG2-Normal").get_font()
+
+        canvas = Canvas(self.doc,
+                             ReportOptions(self.doc, font_normal, "CG2-line"))
+
+        canvas.report_opts.box_shadow *= \
+                        self.Connect.get_val('shadowscale')
+        canvas.report_opts.box_pgap *= self.Connect.get_val('box_Yscale')
+        canvas.report_opts.box_mgap *= self.Connect.get_val('box_Yscale')
+        return canvas
 
     def write_report(self):
         """ Canvas now has everyone ready to print.  Get some misc stuff
@@ -1543,9 +2095,18 @@ class DescendTreeExtraOptions(MenuReportOptions):
             self.__pid.set_help(_("The main family for the report"))
             menu.add_option(category_name, "pid", self.__pid)
 
-        max_gen = NumberOption(_("Generations"), 10, 1, 50)
-        max_gen.set_help(_("The number of generations to include in the tree"))
+        max_pedigree = NumberOption(_("Pedigree Generations"), 3, 1, 10)
+        max_pedigree.set_help(_("The number of pedigree generations to include in the tree"))
+        menu.add_option(category_name, "maxpedigree", max_pedigree)
+
+        max_gen = NumberOption(_("Descendant Generations"), 10, 1, 50)
+        max_gen.set_help(_("The number of descendent generations to include in the tree"))
         menu.add_option(category_name, "maxgen", max_gen)
+
+        fill_out = EnumeratedListOption(_("Display unknown\ngenerations"), 0)
+        fill_out.set_help(_("The number of generations of empty "
+                                "boxes that will be displayed"))
+        menu.add_option(category_name, "fill_out", fill_out)
 
         max_spouse = NumberOption(_("Level of Spouses"), 1, 0, 10)
         max_spouse.set_help(_("0=no Spouses, 1=include Spouses, 2=include "
