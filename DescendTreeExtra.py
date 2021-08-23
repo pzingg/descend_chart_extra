@@ -2097,12 +2097,12 @@ class DescendTreeExtraOptions(MenuReportOptions):
             self.__pid.set_help(_("The main family for the report"))
             menu.add_option(category_name, "pid", self.__pid)
 
-        max_pedigree = NumberOption(_("Pedigree Generations"), 3, 1, 10)
-        max_pedigree.set_help(_("The number of pedigree generations to include in the tree"))
+        max_pedigree = NumberOption(_("Ancestor Generations"), 3, 1, 10)
+        max_pedigree.set_help(_("The number of ancestor generations to include in the tree"))
         menu.add_option(category_name, "maxpedigree", max_pedigree)
 
         max_gen = NumberOption(_("Descendant Generations"), 10, 1, 50)
-        max_gen.set_help(_("The number of descendent generations to include in the tree"))
+        max_gen.set_help(_("The number of descendant generations to include in the tree"))
         menu.add_option(category_name, "maxgen", max_gen)
 
         fill_out = EnumeratedListOption(_("Display unknown\ngenerations"), 0)

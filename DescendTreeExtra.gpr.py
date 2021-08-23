@@ -2,7 +2,7 @@
 
 register(REPORT,
   id    = 'descend_chart_extra',
-  name  = _("Ancestor and Descendent Tree"),
+  name  = _("Ancestor and Descendant Tree"),
   description =  _("Produces a graphical report combining a descendant tree with three ancestor generations and stepchildren."),
   version = '1.0.0',
   gramps_target_version = '5.1',
@@ -20,7 +20,7 @@ register(REPORT,
 if False:
   register(REPORT,
     id    = 'family_descend_chart_extra',
-    name  = _("Family Ancestor and Descendent Tree"),
+    name  = _("Family Ancestor and Descendant Tree"),
     description =  _("Produces a graphical report combining a descendant tree with three ancestor generations and stepchildren."),
     version = '1.0.0',
     gramps_target_version = '5.1',
