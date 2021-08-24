@@ -1,6 +1,11 @@
 # DescendantReportExtra addon
-# Copied directly from gramps/plugins/descendtree.py
 #
+# Notes by Peter Zingg, 2021
+# Much of the code for this addon was copied from two existing Gramps plugins:
+#
+# gramps/plugins/descendtree.py
+# gramps/plugins/ancestortree.py
+
 # Gramps - a GTK+/GNOME based genealogy program
 #
 # Copyright (C) 2000-2007  Donald N. Allingham
@@ -25,8 +30,8 @@
 #
 
 """
-Reports/Graphical Reports/Familial Tree
-Reports/Graphical Reports/Personal Tree
+Reports/Graphical Reports/Ancestor and Descendant Tree
+Reports/Graphical Reports/Family Ancestor and Descendant Tree
 """
 
 #------------------------------------------------------------------------
@@ -383,7 +388,7 @@ class TitleC(DescendantTitleBase):
         self.set_box_height_width()
 
 # -----------------------------------------------------------------------
-# 
+#
 # PART 1. PEDIGREE
 #
 # -----------------------------------------------------------------------
@@ -793,7 +798,7 @@ class MakeAncReport:
         self.width = transform.width
 
 # -----------------------------------------------------------------------
-# 
+#
 # PART 2. DESCENDANTS
 #
 # -----------------------------------------------------------------------
@@ -1725,7 +1730,7 @@ class MakeReport:
             box.y_cm += self.canvas.title.height
 
         self.Make_report()
-        
+
         if self.tree_x_offset > 0:
             for box in boxes:
                 box.x_cm += self.tree_x_offset
