@@ -30,8 +30,8 @@
 #
 
 """
-Reports/Graphical Reports/Ancestor and Descendant Tree
-Reports/Graphical Reports/Family Ancestor and Descendant Tree
+Reports/Graphical Reports/Hourglass Tree
+Reports/Graphical Reports/Family Hourglass Tree
 """
 
 #------------------------------------------------------------------------
@@ -66,7 +66,7 @@ _BORN = _("b.", "birth abbreviation"),
 _DIED = _("d.", "death abbreviation"),
 _MARR = _("m.", "marriage abbreviation"),
 
-_RPT_NAME = 'descend_chart_extra'
+_RPT_NAME = 'hourglass_chart'
 
 LVL_GEN, LVL_INDX, LVL_Y = range(3)
 LVL_ISDESC = 1
@@ -164,7 +164,7 @@ class DescendantTitleBase(TitleBox):
         self._ = locale.translation.sgettext
 
     def descendant_print(self, person_list, person_list2=[]):
-        """ calculate the Descendant title
+        """ calculate the title
         Person_list will always be passed
         If in the Family reports and there are two families, person_list2
         will be used.
@@ -180,21 +180,21 @@ class DescendantTitleBase(TitleBox):
             names2 = self._get_names(person_list2, self._nd)
             if len(names) + len(names2) == 3:
                 if len(names) == 1:
-                    title = self._("Descendant Chart for %(person)s and "
+                    title = self._("Hourglass Chart for %(person)s and "
                                    "%(father1)s, %(mother1)s") % {
                                        'person':  names[0],
                                        'father1': names2[0],
                                        'mother1': names2[1],
                                        }
                 else: # Should be 2 items in names list
-                    title = self._("Descendant Chart for %(person)s, "
+                    title = self._("Hourglass Chart for %(person)s, "
                                    "%(father1)s and %(mother1)s") % {
                                        'father1': names[0],
                                        'mother1': names[1],
                                        'person':  names2[0],
                                        }
             else: # Should be 2 items in both names and names2 lists
-                title = self._("Descendant Chart for %(father1)s, %(father2)s "
+                title = self._("Hourglass Chart for %(father1)s, %(father2)s "
                                "and %(mother1)s, %(mother2)s") % {
                                    'father1': names[0],
                                    'mother1': names[1],
@@ -204,9 +204,9 @@ class DescendantTitleBase(TitleBox):
         else: # No person_list2: Just one family
             if len(names) == 1:
                 title = self._(
-                    "Descendant Chart for %(person)s") % {'person': names[0]}
+                    "Hourglass Chart for %(person)s") % {'person': names[0]}
             else: # Should be two items in names list
-                title = self._("Descendant Chart for %(father)s and "
+                title = self._("Hourglass Chart for %(father)s and "
                                "%(mother)s") % {
                                    'father': names[0],
                                    'mother': names[1],
@@ -235,11 +235,11 @@ class TitleNone(TitleNoDisplay):
     def calc_title(self, persons):
         """Calculate the title of the report"""
         #we want no text, but need a text for the TOC in a book!
-        self.mark_text = self._('Descendant Graph')
+        self.mark_text = self._('Hourglass Chart')
         self.text = ''
 
 class TitleDPY(DescendantTitleBase):
-    """Descendant (Person yes start with parents) Chart
+    """Hourglass (Person yes start with parents) Chart
     Title class for the report """
 
     def __init__(self, dbase, doc, locale, name_displayer):
@@ -269,7 +269,7 @@ class TitleDPY(DescendantTitleBase):
         self.set_box_height_width()
 
 class TitleDPN(DescendantTitleBase):
-    """Descendant (Person no start with parents) Chart
+    """Hourglass (Person no start with parents) Chart
     Title class for the report """
 
     def __init__(self, dbase, doc, locale, name_displayer):
@@ -285,7 +285,7 @@ class TitleDPN(DescendantTitleBase):
         self.set_box_height_width()
 
 class TitleDFY(DescendantTitleBase):
-    """Descendant (Family yes start with parents) Chart
+    """Hourglass (Family yes start with parents) Chart
     Title class for the report """
 
     def __init__(self, dbase, doc, locale, name_displayer):
@@ -328,7 +328,7 @@ class TitleDFY(DescendantTitleBase):
         self.set_box_height_width()
 
 class TitleDFN(DescendantTitleBase):
-    """Descendant (Family no start with parents) Chart
+    """Hourglass (Family no start with parents) Chart
     Title class for the report """
 
     def __init__(self, dbase, doc, locale, name_displayer):
@@ -1766,7 +1766,7 @@ class GuiConnect:
         if Title_type == 0:  #None
             return TitleNone(database, doc, self._locale)
 
-        if Title_type == 1:  #Descendant Chart
+        if Title_type == 1:  #Hourglass Chart
             if self._which_report == _RPT_NAME:
                 if self.get_val('show_parents'):
                     return TitleDPY(database, doc, self._locale, self._nd)
@@ -1816,14 +1816,14 @@ class GuiConnect:
 
 #------------------------------------------------------------------------
 #
-# DescendTreeExtra
+# HourglassTree
 #
 #------------------------------------------------------------------------
-class DescendTreeExtra(Report):
+class HourglassTree(Report):
 
     def __init__(self, database, options, user):
         """
-        Create DescendTreeExtra object that produces the report.
+        Create HourglassTree object that produces the report.
         The arguments are:
 
         database        - the Gramps database instance
@@ -2051,10 +2051,10 @@ class DescendTreeExtra(Report):
 
 #------------------------------------------------------------------------
 #
-# DescendTreeExtraOptions
+# HourglassTreeOptions
 #
 #------------------------------------------------------------------------
-class DescendTreeExtraOptions(MenuReportOptions):
+class HourglassTreeOptions(MenuReportOptions):
 
     """
     Defines options and provides handling interface.
@@ -2088,7 +2088,7 @@ class DescendTreeExtraOptions(MenuReportOptions):
 
     def add_menu_options(self, menu):
         """
-        Add options to the menu for the descendant report.
+        Add options to the menu for the hourglass report.
         """
         ##################
         category_name = _("Tree Options")
@@ -2150,7 +2150,7 @@ class DescendTreeExtraOptions(MenuReportOptions):
 
         self.title = EnumeratedListOption(_("Report Title"), 0)
         self.title.add_item(0, _("Do not include a title"))
-        self.title.add_item(1, _("Descendant Chart for [selected person(s)]"))
+        self.title.add_item(1, _("Hourglass Chart for [selected person(s)]"))
         if self.name.split(",")[0] != _RPT_NAME:
             self.title.add_item(2,
                                 _("Family Chart for [names of chosen family]"))
@@ -2323,7 +2323,7 @@ class DescendTreeExtraOptions(MenuReportOptions):
     def __Title_enum(self):
         item_list = [
             [0, _("Do not include a title")],
-            [1, _("Descendant Chart for [selected person(s)]")],
+            [1, _("Hourglass Chart for [selected person(s)]")],
             ]
         if self.name.split(",")[0] != _RPT_NAME:
             item_list.append(
@@ -2336,7 +2336,7 @@ class DescendTreeExtraOptions(MenuReportOptions):
         self.title.set_items(item_list)
 
     def make_default_style(self, default_style):
-        """Make the default output style for the Descendant Tree."""
+        """Make the default output style for the Hourglass Tree."""
 
         ## Paragraph Styles:
         font = FontStyle()

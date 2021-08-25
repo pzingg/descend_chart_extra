@@ -1,4 +1,8 @@
-# DescendTreeExtra report addon
+# Hourglass Tree report addon for Gramps genealogy software
+
+This report addon combines an ancestor tree and a descendant
+tree into one chart, with ancestors on the left and descendants
+to the right.
 
 For the purposes of this README, we assume that these environment
 variables have been set:
@@ -8,7 +12,7 @@ variables have been set:
   startup. It is usually "$HOME/.gramps"
 
 * "GRAMPS_DEV_HOME" will be the directory into which you have cloned
-  the `gramps`, `addons`, and `addons-source` repositories
+  the "gramps", "addons", and "addons-source" repositories
   from the Gramps GitHub site.
 
 * "GRAMPSPATH" will then be "$GRAMPS_DEV_HOME/gramps"
@@ -26,8 +30,8 @@ https://www.gramps-project.org/wiki/index.php/Addons_development#Create_a_Gramps
 This addon was made by combining source code from two plugins
 that are included in the base Gramps distribution:
 
-* plugins/descendtree.py, and
-* plugins/ancestortree.py
+* "gramps/plugins/drawreport/descendtree.py", and
+* "gramps/plugins/drawreport/ancestortree.py"
 
 The ancestor tree source was slightly modified to go from
 left to right in descendant order from the original right to left.
@@ -37,12 +41,16 @@ in the function `MakePersonTree.link_ancestors_to_center`.
 
 ## Download
 
-To begin, clone this repository into ${GRAMPS_DEV_HOME}/addons-source with
+To begin, clone this repository with
 
-`git clone https://github.com/pzingg/descend_chart_extra DescendTreeExtra`
+```
+git clone https://github.com/pzingg/gramps_hourglass_tree \
+  ${GRAMPS_DEV_HOME}/addons-source/HourglassTree
+```
 
-The directory containing this README and the two Python source files
-should be ${GRAMPS_DEV_HOME}/addons-source/DescendTreeExtra.
+By convention, addon directories are capitalized, in camel case, without
+spaces or other punctuation, so the directory containing this README and the
+two Python source files should be "${GRAMPS_DEV_HOME}/addons-source/HourglassTree".
 
 ## Build
 
@@ -56,11 +64,11 @@ cd ${GRAMPS_DEV_HOME}/addons-source
 
 # GRAMPSPATH and LANGUAGE must be set as above in order to use make.py
 # Change gramps51 to something else for different targets
-python3 make.py gramps51 build DescendTreeExtra
+python3 make.py gramps51 build HourglassTree
 ```
 
-This should put the archived addon file DescendTreeExtra.addon.tgz into
-${GRAMPS_DEV_HOME}/addons/gramps51/download
+This should put the archived addon file "HourglassTree.addon.tgz" into
+"${GRAMPS_DEV_HOME}/addons/gramps51/download".
 
 ## Create a listing
 
@@ -74,11 +82,11 @@ cd ${GRAMPS_DEV_HOME}/addons-source
 
 # GRAMPSPATH and LANGUAGE must be set as above in order to use make.py
 # Change gramps51 to something else for different targets
-python3 make.py gramps51 listing DescendTreeExtra
+python3 make.py gramps51 listing HourglassTree
 ```
 
 This will update all the locale files in
-${GRAMPS_DEV_HOME}/addons/gramps51/listings to include the addon.
+"${GRAMPS_DEV_HOME}/addons/gramps51/listings" to include the addon.
 
 ## Building and running gramps
 
@@ -100,10 +108,10 @@ $GRAMPS_DEV_HOME to the actual directory):
 
 1. Go to Edit -> Preferences -> General
 2. Change the URL in "Where to check:" from the default http location to
-    file:///${GRAMPS_DEV_HOME}/addons/gramps51/
+    file://${GRAMPS_DEV_HOME}/addons/gramps51/
 
 
-I also tried just ${GRAMPS_DEV_HOME}/addons/gramps51/
+I also tried just "${GRAMPS_DEV_HOME}/addons/gramps51/" without the "file://"
 
 Instead install the addon manually.
 
@@ -111,22 +119,22 @@ Either unpack the archived .tgz built above:
 
 ```
 mkdir -p ${GRAMPS_CONF_DIR}/gramps51/plugins
-tar xzf ${GRAMPS_DEV_HOME}/addons/gramps51/download/DescendTreeExtra.addon.tgz \
+tar xzf ${GRAMPS_DEV_HOME}/addons/gramps51/download/HourglassTree.addon.tgz \
   -C ${GRAMPS_CONF_DIR}/gramps51/plugins
 ```
 
 Or just copy the two Python files from addons-source:
 
 ```
-mkdir -p ${GRAMPS_CONF_DIR}/gramps51/plugins/DescendTreeExtra
-cp ${GRAMPS_DEV_HOME}/addons-source/DescendTreeExtra/*.py ${GRAMPS_CONF_DIR}/gramps51/plugins/DescendTreeExtra
+mkdir -p ${GRAMPS_CONF_DIR}/gramps51/plugins/HourglassTree
+cp ${GRAMPS_DEV_HOME}/addons-source/HourglassTree/*.py ${GRAMPS_CONF_DIR}/gramps51/plugins/HourglassTree
 ```
 
 Then restart Gramps.
 
 The Python files should be located in
-${GRAMPS_CONF_DIR}/gramps51/plugins/DescendTreeExtra, and
-the `status` option in DescendTreeExtra.gpr.py must be set to "STABLE"
+"${GRAMPS_CONF_DIR}/gramps51/plugins/HourglassTree", and
+the `status` option in "hourglasstree.gpr.py" must be set to "STABLE"
 in order for the addon to be loaded at startup.
 
 ## Other notes

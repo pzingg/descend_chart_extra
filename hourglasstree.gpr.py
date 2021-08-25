@@ -1,0 +1,36 @@
+# Register the HourglassTree report addon
+
+register(REPORT,
+  id    = 'hourglass_chart',
+  name  = _("Hourglass Tree"),
+  description =  _("Produces a graphical report combining an ancestor tree and a descendant tree."),
+  version = '1.0.0',
+  gramps_target_version = '5.1',
+  status = STABLE,
+  fname = 'hourglasstree.py',
+  authors = ["Peter Zingg"],
+  authors_email = ["peter.zingg@gmail.com"],
+  category = CATEGORY_DRAW,
+  require_active = True,
+  reportclass = 'HourglassTree',
+  optionclass = 'HourglassTreeOptions',
+  report_modes = [REPORT_MODE_GUI, REPORT_MODE_CLI],
+)
+
+if False:
+  register(REPORT,
+    id    = 'family_hourglass_chart',
+    name  = _("Family Hourglass Tree"),
+    description =  _("Produces a graphical report combining an ancestor tree and a descendant tree."),
+    version = '1.0.0',
+    gramps_target_version = '5.1',
+    status = STABLE,
+    fname = 'hourglasstree.py',
+    authors = ["Peter Zingg"],
+    authors_email = ["peter.zingg@gmail.com"],
+    category = CATEGORY_DRAW,
+    require_active = True,
+    reportclass = 'HourglassTree',
+    optionclass = 'HourglassTreeOptions',
+    report_modes = [REPORT_MODE_GUI, REPORT_MODE_CLI],
+  )
