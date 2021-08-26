@@ -104,16 +104,16 @@ ${GRAMPS_DEV_HOME}/gramps/build/scripts-3.8/gramps
 
 Changing the addon download and listing path preference in Gramps to your
 development setup doesn't seem to work.  I tried this (expanding
-$GRAMPS_DEV_HOME to the actual directory):
+"$GRAMPS_DEV_HOME" to the actual directory):
 
-1. Go to Edit -> Preferences -> General
-2. Change the URL in "Where to check:" from the default http location to
-    file://${GRAMPS_DEV_HOME}/addons/gramps51/
+1. Go to "Edit" -> "Preferences" -> "General"
+2. Change the value of "Where to check:" from the default "http://" URL to
+    "file://${GRAMPS_DEV_HOME}/addons/gramps51/"
 
 
 I also tried just "${GRAMPS_DEV_HOME}/addons/gramps51/" without the "file://"
 
-Instead install the addon manually.
+Instead it's simpler to install the addon manually.
 
 Either unpack the archived .tgz built above:
 
@@ -132,9 +132,9 @@ cp ${GRAMPS_DEV_HOME}/addons-source/HourglassTree/*.py ${GRAMPS_CONF_DIR}/gramps
 
 Then restart Gramps.
 
-The Python files should be located in
-"${GRAMPS_CONF_DIR}/gramps51/plugins/HourglassTree", and
-the `status` option in "hourglasstree.gpr.py" must be set to "STABLE"
+Note: The Python files "hourglasstree.py" and "hourglasstree.gpr.py" should be
+located in "${GRAMPS_CONF_DIR}/gramps51/plugins/HourglassTree", and
+the `status` option in "hourglasstree.gpr.py" must be set to "STABLE",
 in order for the addon to be loaded at startup.
 
 ## Other notes
@@ -156,6 +156,12 @@ to be a "City" type).
 $n(n< / >f< >l)
 b. $b {in $B(c)}
 -{d. $d} {in $D(c)}
+```
+
+And for the marriage places:
+
+```
+m. $m {in $M(c)}
 ```
 
 In order to see the cities (`$B(c)`, `$D(c)`, `$M(c)`, etc), the places
